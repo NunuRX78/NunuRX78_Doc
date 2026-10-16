@@ -117,12 +117,28 @@ input.money{font-size:26px;font-weight:700}
 <div class="sheet-bg" id="bg2">
   <div class="sheet tools">
     <h2>Menu</h2>
+    <button id="cloudBtn">☁️ Đồng bộ đám mây</button>
     <button id="exCsv">📄 Xuất file CSV (mở bằng Excel)</button>
     <button id="exJson">💾 Sao lưu dữ liệu (JSON)</button>
     <button id="imJson">📥 Khôi phục từ file sao lưu</button>
     <button id="clearAll" style="color:var(--exp)">🗑️ Xoá toàn bộ dữ liệu</button>
     <div class="row"><button class="cancel" id="close2">Đóng</button></div>
     <input type="file" id="file" accept=".json" style="display:none">
+  </div>
+</div>
+
+<div class="sheet-bg" id="bg3">
+  <div class="sheet">
+    <h2>☁️ Đồng bộ đám mây</h2>
+    <p id="cloudInfo" style="color:var(--muted);font-size:14px;margin:0 0 8px"></p>
+    <div id="authForm">
+      <label>Email</label><input type="email" id="em" autocomplete="email">
+      <label>Mật khẩu (tối thiểu 6 ký tự)</label><input type="password" id="pw" autocomplete="current-password">
+      <div class="row"><button class="save" id="loginBtn">Đăng nhập</button><button class="cancel" id="regBtn">Đăng ký</button></div>
+    </div>
+    <div id="authOut" style="display:none"><div class="row"><button class="del" id="logoutBtn">Đăng xuất</button></div></div>
+    <p id="cloudMsg" style="color:var(--exp);font-size:14px;min-height:18px"></p>
+    <div class="row" style="margin-top:0"><button class="cancel" id="close3">Đóng</button></div>
   </div>
 </div>
 
@@ -139,6 +155,9 @@ let cur=new Date();cur.setDate(1);
 let type="e",catIdx=0,editId=null,tab=1;
 const ym=()=>cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,"0");
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cloud=(fn,...a)=>{try{if(window.cloud&&window.cloud.user)window.cloud[fn](...a)}catch(e){console.error(e)}};
+window.getLocalData=()=>data;
+window.onCloudData=arr=>{data=arr;save();render()};
 const catOf=(t,name)=>(t==="e"?EXP:INC).find(c=>c[1]===name)||["📦",name];
 
 function render(){
@@ -213,15 +232,16 @@ $("save").onclick=()=>{
   if(!amount){$("amount").focus();return}
   const cat=(type==="e"?EXP:INC)[catIdx][1];
   const rec={type,amount,cat,note:$("note").value.trim(),date:$("date").value||today()};
-  if(editId){Object.assign(data.find(d=>d.id===editId),rec)}
-  else data.push({id:Date.now(),...rec});
-  save();
+  let r;
+  if(editId){r=data.find(d=>d.id===editId);Object.assign(r,rec)}
+  else{r={id:Date.now(),...rec};data.push(r)}
+  save();cloud("set",r);
   const [y,m]=rec.date.split("-");cur=new Date(+y,+m-1,1);
   $("bg").classList.remove("show");render();
 };
 $("delBtn").onclick=()=>{
   if(!confirm("Xoá giao dịch này?"))return;
-  data=data.filter(d=>d.id!==editId);save();$("bg").classList.remove("show");render();
+  data=data.filter(d=>d.id!==editId);save();cloud("del",editId);$("bg").classList.remove("show");render();
 };
 $("prev").onclick=()=>{cur.setMonth(cur.getMonth()-1);render()};
 $("next").onclick=()=>{cur.setMonth(cur.getMonth()+1);render()};
@@ -251,16 +271,50 @@ $("file").onchange=e=>{
     try{
       const d=JSON.parse(r.result);
       if(!Array.isArray(d)||!d.every(x=>x&&typeof x.amount==="number"&&typeof x.date==="string"&&(x.type==="e"||x.type==="i")))throw 0;
-      if(confirm("Thay thế dữ liệu hiện tại bằng "+d.length+" giao dịch trong file?")){data=d.map(x=>({id:x.id||Date.now()+Math.random(),type:x.type,amount:x.amount,cat:String(x.cat||"Khác"),note:String(x.note||""),date:x.date}));save();render();$("bg2").classList.remove("show")}
+      if(confirm("Thay thế dữ liệu hiện tại bằng "+d.length+" giao dịch trong file?")){data=d.map(x=>({id:x.id||Date.now()+Math.random(),type:x.type,amount:x.amount,cat:String(x.cat||"Khác"),note:String(x.note||""),date:x.date}));save();cloud("replaceAll",data);render();$("bg2").classList.remove("show")}
     }catch(_){alert("File không hợp lệ.")}
     e.target.value="";
   };
   r.readAsText(f);
 };
-$("clearAll").onclick=()=>{if(confirm("Xoá TOÀN BỘ dữ liệu? Không thể hoàn tác.")){data=[];save();render();$("bg2").classList.remove("show")}};
+$("clearAll").onclick=()=>{if(confirm("Xoá TOÀN BỘ dữ liệu? Không thể hoàn tác.")){data=[];save();cloud("replaceAll",[]);render();$("bg2").classList.remove("show")}};
+
+// đồng bộ đám mây
+const errVi=e=>{const c=e&&e.code||"";
+  if(/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c))return"Sai email hoặc mật khẩu.";
+  if(c.includes("email-already"))return"Email này đã đăng ký, hãy bấm Đăng nhập.";
+  if(c.includes("weak-password"))return"Mật khẩu tối thiểu 6 ký tự.";
+  if(c.includes("invalid-email"))return"Email không hợp lệ.";
+  if(c.includes("network"))return"Không có mạng.";
+  if(c.includes("operation-not-allowed"))return"Chưa bật Email/Password trong Firebase Authentication.";
+  return"Lỗi: "+(c||e);};
+function cloudUI(){
+  const c=window.cloud;
+  $("cloudBtn").textContent=c&&c.user?"☁️ Đã đồng bộ ("+c.user.email+")":"☁️ Đồng bộ đám mây (chưa đăng nhập)";
+  const on=!!(c&&c.user);
+  $("authForm").style.display=on||!(c&&c.configured)?"none":"";
+  $("authOut").style.display=on?"":"none";
+  $("cloudInfo").textContent=!c?"Chưa tải được Firebase (cần mạng lần đầu).":!c.configured?"Chưa cấu hình Firebase. Xem FIREBASE-SETUP.md.":on?"Đang đăng nhập: "+c.user.email+". Dữ liệu tự đồng bộ giữa các thiết bị, và vẫn dùng được khi mất mạng.":"Đăng nhập để đồng bộ dữ liệu lên đám mây. Dữ liệu trên máy sẽ được tải lên.";
+}
+window.addEventListener("cloudstate",cloudUI);
+$("cloudBtn").onclick=()=>{$("bg2").classList.remove("show");$("cloudMsg").textContent="";cloudUI();$("bg3").classList.add("show")};
+$("close3").onclick=()=>$("bg3").classList.remove("show");
+$("bg3").onclick=e=>{if(e.target===$("bg3"))$("bg3").classList.remove("show")};
+async function auth(fn){
+  const e=$("em").value.trim(),p=$("pw").value;
+  if(!e||!p){$("cloudMsg").textContent="Nhập email và mật khẩu.";return}
+  $("cloudMsg").textContent="Đang xử lý…";
+  try{await window.cloud[fn](e,p);$("cloudMsg").textContent="";$("pw").value="";$("bg3").classList.remove("show")}
+  catch(x){$("cloudMsg").textContent=errVi(x)}
+}
+$("loginBtn").onclick=()=>auth("login");
+$("regBtn").onclick=()=>auth("register");
+$("logoutBtn").onclick=async()=>{await window.cloud.logout();$("bg3").classList.remove("show")};
+cloudUI();
 
 render();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
+<script type="module" src="sync.js"></script>
 </body>
 </html>
