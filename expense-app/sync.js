@@ -1,71 +1,86 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
-
-const emit = () => window.dispatchEvent(new CustomEvent("cloudstate"));
-const configured = !String(firebaseConfig.apiKey).startsWith("YOUR_");
-const cloud = { configured, user: null };
-window.cloud = cloud;
-
-if (!configured) {
-  emit();
-} else {
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-  });
-  let unsub = null;
-  const col = () => collection(db, "users", cloud.user.uid, "tx");
-  const ref = id => doc(db, "users", cloud.user.uid, "tx", String(id));
+// Đồng bộ với Google Sheets qua Apps Script (xem SHEETS-SETUP.md)
+(function () {
+  const K = "sheets-sync-v1", O = "sheets-outbox-v1";
+  const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v } catch (e) { return d } };
+  const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) {} };
+  let cfg = load(K, null);          // {url, token, seeded}
+  let out = load(O, []);            // hàng đợi thao tác chưa đẩy lên
+  let timer = null;
+  const cloud = window.cloud = { configured: true, connected: !!cfg, busy: false, status: "" };
+  const emit = () => window.dispatchEvent(new CustomEvent("cloudstate"));
+  const setStatus = s => { cloud.status = s; emit() };
   const clean = r => ({ id: r.id, type: r.type, amount: r.amount, cat: r.cat, note: r.note || "", date: r.date });
+  const norm = r => ({ id: Number(r.id), type: r.type, amount: Number(r.amount) || 0, cat: String(r.cat), note: String(r.note || ""), date: String(r.date) });
+  const errMsg = e => /Failed to fetch|NetworkError|Load failed/i.test(e.message)
+    ? "Không kết nối được. Kiểm tra link, và Apps Script phải deploy với quyền \"Anyone\"." : e.message;
 
-  cloud.login = (e, p) => signInWithEmailAndPassword(auth, e, p);
-  cloud.register = (e, p) => createUserWithEmailAndPassword(auth, e, p);
-  cloud.logout = () => signOut(auth);
-  cloud.set = r => setDoc(ref(r.id), clean(r)).catch(console.error);
-  cloud.del = id => deleteDoc(ref(id)).catch(console.error);
-  cloud.replaceAll = async arr => {
+  async function call(c, ops) {
+    let res;
+    if (!ops) {
+      const u = new URL(c.url); u.searchParams.set("token", c.token);
+      res = await fetch(u);
+    } else {
+      // text/plain để tránh preflight CORS (Apps Script không hỗ trợ OPTIONS)
+      res = await fetch(c.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ token: c.token, ops }) });
+    }
+    let j; try { j = await res.json() } catch (e) { throw new Error("Link không đúng hoặc chưa deploy Apps Script.") }
+    if (!j.ok) throw new Error(j.error || "Lỗi không rõ");
+    return j;
+  }
+
+  function applyPending(rows) {
+    let m = new Map(rows.map(r => [String(r.id), r]));
+    out.forEach(o => {
+      if (o.op === "set") m.set(String(o.r.id), o.r);
+      else if (o.op === "del") m.delete(String(o.id));
+      else if (o.op === "replaceAll") { m = new Map(o.rows.map(r => [String(r.id), r])) }
+    });
+    return Array.from(m.values()).map(norm);
+  }
+
+  cloud.sync = async function () {
+    if (!cfg || cloud.busy) return;
+    if (!navigator.onLine) { setStatus("Đang offline – sẽ tự đồng bộ khi có mạng"); return }
+    cloud.busy = true; setStatus("Đang đồng bộ…");
     try {
-      const keep = new Set(arr.map(r => String(r.id)));
-      const ops = [];
-      (window.cloudLast || []).forEach(r => { if (!keep.has(String(r.id))) ops.push(["d", r]); });
-      arr.forEach(r => ops.push(["s", r]));
-      for (let i = 0; i < ops.length; i += 400) {
-        const b = writeBatch(db);
-        ops.slice(i, i + 400).forEach(([k, r]) => k === "d" ? b.delete(ref(r.id)) : b.set(ref(r.id), clean(r)));
-        await b.commit();
+      if (!cfg.seeded) {
+        out = out.concat(window.getLocalData().map(r => ({ op: "set", r: clean(r) })));
+        cfg.seeded = true; store(K, cfg); store(O, out);
       }
-    } catch (e) { console.error(e); }
+      if (out.length) {
+        const batch = out.slice();
+        await call(cfg, batch);
+        out = out.slice(batch.length); store(O, out);
+      }
+      const j = await call(cfg);
+      window.onCloudData(applyPending(j.rows));
+      setStatus("Đã đồng bộ lúc " + new Date().toLocaleTimeString("vi-VN"));
+    } catch (e) { setStatus("Lỗi đồng bộ: " + errMsg(e)) }
+    cloud.busy = false;
   };
 
-  onAuthStateChanged(auth, user => {
-    cloud.user = user;
-    if (unsub) { unsub(); unsub = null; }
-    window.cloudLast = [];
-    if (user) {
-      const flagKey = "fb-uploaded-" + user.uid;
-      unsub = onSnapshot(col(), snap => {
-        let arr = snap.docs.map(d => d.data());
-        let uploaded = false;
-        try { uploaded = localStorage.getItem(flagKey) === "1"; } catch (_) {}
-        if (!uploaded) {
-          // Chưa có dữ liệu từ máy chủ thì chưa ghi đè dữ liệu trên máy
-          if (snap.metadata.fromCache) return;
-          const ids = new Set(arr.map(r => String(r.id)));
-          const extra = (window.getLocalData ? window.getLocalData() : []).filter(r => !ids.has(String(r.id)));
-          extra.forEach(r => cloud.set(r));
-          arr = arr.concat(extra);
-          try { localStorage.setItem(flagKey, "1"); } catch (_) {}
-        }
-        window.cloudLast = arr;
-        if (window.onCloudData) window.onCloudData(arr);
-      }, err => console.error(err));
-    }
-    emit();
-  });
+  const later = () => { clearTimeout(timer); timer = setTimeout(cloud.sync, 800) };
+  const push = o => { out.push(o); store(O, out); later() };
+  cloud.set = r => push({ op: "set", r: clean(r) });
+  cloud.del = id => push({ op: "del", id });
+  cloud.replaceAll = arr => { out = [{ op: "replaceAll", rows: arr.map(clean) }]; store(O, out); later() };
+
+  cloud.connect = async function (url, token) {
+    const c = { url: url.trim(), token: token.trim(), seeded: false };
+    try { await call(c) } catch (e) { throw new Error(errMsg(e)) }
+    cfg = c; out = []; store(K, cfg); store(O, out);
+    cloud.connected = true; emit();
+    return cloud.sync();
+  };
+  cloud.disconnect = function () {
+    cfg = null; out = []; cloud.connected = false;
+    try { localStorage.removeItem(K); localStorage.removeItem(O) } catch (e) {}
+    setStatus("");
+  };
+  cloud.getUrl = () => cfg ? cfg.url : "";
+
+  window.addEventListener("online", cloud.sync);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) cloud.sync() });
   emit();
-}
+  cloud.sync();
+})();
