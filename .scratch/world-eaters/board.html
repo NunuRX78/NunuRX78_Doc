@@ -1,0 +1,514 @@
+<title>World Eaters Cloud</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: header with destination + live run status → five status columns (Jira-style, plus "Kẹt") → dependency map; cards expand in place. Same board as the Mac version, recoloured teal so the two are never confused. */
+:root {
+  --bg: #f1f5f5; --panel: #ffffff; --line: #d6e0e1; --fg: #172325; --muted: #5c6c70;
+  --accent: #0f7f86;
+  --ready: #1f66c2; --ready-bg: #e3edfd;
+  --doing: #a87500; --doing-bg: #fff2cf;
+  --done: #2b8650; --done-bg: #dcf1e4;
+  --waiting: #76848a; --waiting-bg: #e9eef0;
+  --stuck: #b8322c; --stuck-bg: #fde4e2;
+  --you: #b4410f; --you-bg: #ffe7da;
+  --f-ui: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101719; --panel: #172124; --line: #283639; --fg: #e5eef0; --muted: #94a7ab;
+  --accent: #4fc6cc;
+  --ready: #8fb4ff; --ready-bg: #1b2b48; --doing: #f0c35a; --doing-bg: #3a2f12;
+  --done: #6fd39a; --done-bg: #163324; --waiting: #a0afb4; --waiting-bg: #233033;
+  --stuck: #ff8f86; --stuck-bg: #3f1d1b;
+  --you: #ffab84; --you-bg: #3d2318; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #101719; --panel: #172124; --line: #283639; --fg: #e5eef0; --muted: #94a7ab;
+  --accent: #4fc6cc;
+  --ready: #8fb4ff; --ready-bg: #1b2b48; --doing: #f0c35a; --doing-bg: #3a2f12;
+  --done: #6fd39a; --done-bg: #163324; --waiting: #a0afb4; --waiting-bg: #233033;
+  --stuck: #ff8f86; --stuck-bg: #3f1d1b;
+  --you: #ffab84; --you-bg: #3d2318; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1400px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 22px; }
+header { display: grid; gap: 14px; }
+.eyebrow { font: 600 12px/1 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 0; font-size: clamp(24px, 3.4vw, 34px); font-weight: 800; letter-spacing: -.01em; text-wrap: balance; }
+.dest { max-width: 76ch; color: var(--muted); }
+.dest p { margin: 0 0 8px; }
+.dest p:last-child { margin: 0; }
+.dest strong { color: var(--fg); }
+code { font-family: var(--f-mono); font-size: 12px; background: var(--waiting-bg); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+.run { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; max-width: 76ch; }
+.run .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--waiting); flex: none; }
+.run.live .dot { background: var(--done); }
+.run b { font-weight: 700; }
+.run .when { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+.run .msg { flex-basis: 100%; color: var(--muted); font-size: 13px; }
+.run .msg:empty { display: none; }
+.progress { display: grid; gap: 3px; max-width: 680px; }
+.progress span { height: 12px; border-radius: 2px; background: var(--waiting-bg); border: 1px solid var(--line); }
+.progress span.done { background: var(--done); border-color: var(--done); }
+.progress span.doing { background: var(--doing); border-color: var(--doing); }
+.progress span.ready { background: var(--ready-bg); border-color: var(--ready); }
+.progress span.stuck { background: var(--stuck); border-color: var(--stuck); }
+.progress span.you { background: var(--you-bg); border-color: var(--you); }
+.stats { display: flex; flex-wrap: wrap; gap: 18px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.stats b { color: var(--fg); font-size: 15px; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 1180px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .board { grid-template-columns: minmax(0, 1fr); } }
+.col { background: color-mix(in srgb, var(--panel) 55%, var(--bg)); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.col h2 { margin: 0; padding: 4px 4px 6px; font: 700 12px var(--f-ui); letter-spacing: .07em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+.col h2 .n { font: 700 12px var(--f-mono); color: var(--muted); }
+.col h2 i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.col .hint { margin: -4px 4px 4px; color: var(--muted); font-size: 12px; }
+.empty { color: var(--muted); font-size: 13px; padding: 10px 4px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; gap: 8px; cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
+.card:hover { border-color: var(--accent); }
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card.mine { border-left: 3px solid var(--you); }
+.card .top { display: flex; gap: 8px; align-items: baseline; }
+.card .id { font: 700 12px var(--f-mono); color: var(--muted); flex: none; }
+.card .t { font-weight: 600; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 600 11px/1 var(--f-ui); padding: 4px 7px; border-radius: 4px; background: var(--waiting-bg); color: var(--muted); letter-spacing: .02em; }
+.chip.you { background: var(--you-bg); color: var(--you); }
+.chip.cloud { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: var(--accent); }
+.chip.blk { font-family: var(--f-mono); font-weight: 500; }
+.chip.blk.open { background: transparent; border: 1px dashed var(--line); }
+.chip.blk.unlock.open { border-color: var(--you); color: var(--you); }
+.status-note { font-size: 12px; color: var(--fg); background: var(--waiting-bg); border-radius: 4px; padding: 6px 8px; overflow-wrap: anywhere; }
+.status-note.stuck { background: var(--stuck-bg); color: var(--stuck); }
+.status-note.done { background: var(--done-bg); color: var(--done); }
+.detail { border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px; color: var(--fg); min-width: 0; }
+.detail p { margin: 0 0 8px; } .detail ul { margin: 0 0 8px; padding-left: 20px; }
+.detail li { margin-bottom: 3px; }
+.detail h4 { margin: 10px 0 4px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--done); }
+.detail .was { color: var(--muted); font-size: 12px; border-left: 2px solid var(--line); padding-left: 8px; }
+.section-h { margin: 0; font-size: 16px; }
+.mapbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; overflow-x: auto; }
+.mapbox pre { margin: 0; min-width: 960px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 13px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+.later { display: grid; gap: 6px; }
+.later ul { margin: 0; padding-left: 20px; color: var(--muted); max-width: 90ch; }
+.later ul strong { color: var(--fg); }
+@media (prefers-reduced-motion: no-preference) { .card { transition: border-color .15s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Board · Bản cloud, chạy bởi Claude</div>
+    <h1>Chép World Eaters, bản cloud</h1>
+    <div class="dest">
+      <p>Bản độc lập của board <strong>Chép World Eaters</strong>. Cùng đích: bản chép World Eaters 1 của ELK Studios đạt chuẩn Orbitfall 4, chơi được, đúng luật, đẹp; tên, art, âm thanh mới, chỉ chép luật và nhịp. Khác ở chỗ chạy: <strong>mọi ticket do Claude làm trong một phiên Claude Code trên cloud</strong>, không dùng Mac, không dùng GPU máy bàn.</p>
+      <p><strong>Đổi so với bản Mac.</strong> Không có GPU nên không có Retro Diffusion và Ollama. Art pixel vẽ bằng code: sprite là ma trận chỉ số palette, render ra PNG trong container, có thể thêm ảnh Gemini nếu có khoá. Không cần LLM local vì Claude chính là model. Cố vấn Opus và bản đọc luật độc lập là subagent mới trong phiên, chỉ được giao đúng tư liệu cần đọc. Runner là chính phiên này, có lịch hằng giờ đánh thức nó; không cần launchd, không cần Mac cắm điện. Container là tạm, nên xong ticket nào thì commit và push lên nhánh <code>claude/inspiring-ptolemy-c3q4wb</code> ngay, và cập nhật trạng thái vào database của board này.</p>
+      <p><strong>Ba việc mở khoá cần bạn, mỗi việc một lần (M1–M3):</strong> mở mạng tới demo ELK, đưa code Orbitfall 4 và clone-kit vào phiên, đặt khoá Gemini làm secret. Ngoài ba việc đó, bạn không phải động tay.</p>
+      <p><strong>Map xong khi</strong> mở bản dựng, dùng cheat vào từng feature của cả 5 thế giới và vòng bonus, cái nào cũng diễn trọn; <code>npm run check</code> xanh mà không thêm mục <code>KNOWN_DEBT</code> nào, kể cả script đối chiếu <code>RULE_TRACE.md</code>; soak 1.000 spin không lỗi; đặt cạnh clip quay từ demo gốc, mỗi khoảnh khắc lệch thời lượng không quá 20%; có báo cáo cuối liệt kê mọi quyết định máy tự chốt.</p>
+      <p><strong>Hiện trạng đo trong container (31·10·2026):</strong> Linux 4 nhân, 15 GB RAM, <strong>không GPU</strong>; có Chromium + Playwright, ffmpeg 6.1, Node 22, Python 3.13, Claude Code 2.1.316. WebSearch chạy được (đã ra SlotCatalog, SIGMA, casinos.com, Slotstemple). Chính sách mạng của môi trường <strong>chặn</strong> <code>elk-studios.com</code>, <code>slotcatalog.com</code>, <code>youtube.com</code>; npm, PyPI và API Gemini đi được. Không gọi được máy bàn <code>100.119.208.36</code>. Repo hiện chỉ có <code>expense-app</code>: chưa có Orbitfall 4, <code>clone_kit.py</code>, <code>08_CLONE_GAME_WORKFLOW.md</code>. Chưa có khoá Gemini trong môi trường.</p>
+      <p>Thông tin công khai, <em>chưa đối chiếu trong demo</em>: lưới 5×5, RTP 94%, tối đa 10.000×; ăn symbol nhà, cascade ngược lên; 5 thế giới theo thứ tự Whale, Pipe, Fireworks, Trees &amp; Forest, Volcano, feature kích hoạt 3 lần thì sang thế giới mới; UFO cho symbol xếp chồng trong free spins. Ngày ra mắt lệch: 22·12·2025 (SlotCatalog) và 18·12·2025 (SIGMA).</p>
+    </div>
+    <div class="run" id="run" aria-live="polite">
+      <span class="dot"></span><b id="run-phase">Đang tải trạng thái chạy…</b><span class="when" id="run-when"></span>
+      <span class="msg" id="run-msg"></span>
+    </div>
+    <div class="progress" id="progress" aria-label="Tiến độ"></div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <section id="view-board" class="board" aria-label="Board"></section>
+
+  <section class="later" aria-labelledby="map-h">
+    <h2 class="section-h" id="map-h">Sơ đồ phụ thuộc</h2>
+    <div class="legend">
+      <span><i style="background:var(--you)"></i>Mở khoá, cần bạn</span>
+      <span><i style="background:var(--ready)"></i>Làm được ngay khi mở board</span>
+      <span><i style="background:var(--waiting)"></i>Đang chờ</span>
+    </div>
+    <div class="mapbox"><pre class="mermaid">flowchart LR
+  M1["M1 Mở mạng tới demo ELK"]:::you
+  M2["M2 Đưa Orbitfall 4 và clone-kit vào phiên"]:::you
+  M3["M3 Khoá Gemini làm secret"]:::you
+  T01["01 Nguồn chính thức của ELK"]:::ready
+  T02["02 Review và cơ sở dữ liệu slot"]:::ready
+  T03["03 Video gameplay trên mạng"]:::ready
+  T04["04 Tổng hợp bản mô tả gameplay"]:::waiting
+  T05["05 Bộ công cụ trong container"]:::ready
+  T06["06 Runner trong phiên cloud"]:::ready
+  T07["07 Cố vấn Opus và bộ đếm lỗi"]:::waiting
+  T08["08 Cửa chấm art bằng Gemini"]:::waiting
+  T09["09 Script đối chiếu RULE_TRACE"]:::ready
+  T10["10 Lịch đánh thức, board tự cập nhật"]:::waiting
+  T11["11 Khởi tạo effort world-eaters"]:::waiting
+  T12["12 Chụp màn luật và paytable"]:::waiting
+  T13["13 Quay video demo, autoplay dài"]:::waiting
+  T14["14 Teardown luật thành RULES.md"]:::waiting
+  T15["15 Đếm video giải chỗ còn mở"]:::waiting
+  T16["16 Bản đọc độc lập RULE_TRACE"]:::waiting
+  T17["17 Chốt luật"]:::waiting
+  T18["18 Art direction và tên game"]:::waiting
+  T19["19 Khung code từ Orbitfall 4"]:::waiting
+  T20["20 Hợp đồng vòng chơi"]:::waiting
+  T21["21 Engine luật lõi"]:::waiting
+  T22["22 Engine feature"]:::waiting
+  T23["23 Cheat và kịch bản"]:::waiting
+  T24["24 Greybox chơi được"]:::waiting
+  T25["25 Palette và bộ symbol"]:::waiting
+  T26["26 Nền 5 thế giới, khung, HUD art"]:::waiting
+  T27["27 VFX đối chiếu"]:::waiting
+  T28["28 Âm thanh synth"]:::waiting
+  T29["29 HUD, màn luật, X-iter, Big Win"]:::waiting
+  T30["30 Kiểm cảm giác bằng máy"]:::waiting
+  T31["31 Nghiệm thu và bàn giao"]:::waiting
+  T01 --> T04
+  T02 --> T04
+  T03 --> T04
+  T05 --> T08
+  M3 --> T08
+  T06 --> T07
+  T06 --> T10
+  T07 --> T10
+  T10 --> T11
+  T11 --> T12
+  T04 --> T12
+  M1 --> T12
+  T11 --> T13
+  T04 --> T13
+  M1 --> T13
+  T12 --> T14
+  T04 --> T14
+  T13 --> T15
+  T14 --> T15
+  T07 --> T16
+  T12 --> T16
+  T13 --> T16
+  T15 --> T17
+  T16 --> T17
+  T11 --> T18
+  T04 --> T18
+  T11 --> T19
+  M2 --> T19
+  T17 --> T20
+  T19 --> T20
+  T09 --> T21
+  T20 --> T21
+  T21 --> T22
+  T22 --> T23
+  T23 --> T24
+  T05 --> T25
+  T08 --> T25
+  T17 --> T25
+  T18 --> T25
+  T25 --> T26
+  T13 --> T27
+  T24 --> T27
+  T26 --> T27
+  T24 --> T28
+  T24 --> T29
+  T27 --> T30
+  T28 --> T30
+  T29 --> T30
+  T30 --> T31
+  classDef you fill:#ffe7da,stroke:#b4410f,color:#172325
+  classDef ready fill:#e3edfd,stroke:#1f66c2,color:#172325
+  classDef waiting fill:#e9eef0,stroke:#76848a,color:#172325</pre></div>
+  </section>
+
+  <section class="later">
+    <h2 class="section-h">Cố ý nằm ngoài board này</h2>
+    <ul>
+      <li><strong>Board bản Mac</strong> vẫn giữ nguyên ở URL cũ. Hai board không đồng bộ với nhau; chạy cả hai cùng lúc là làm một việc hai lần.</li>
+      <li><strong>World Eaters 2</strong> (ELK ghi ngày ra mắt 24·11·2026): effort riêng, sau khi bản 1 xong.</li>
+      <li><strong>Mechanic Doc, Pitch Doc, publish Confluence</strong>: làm sau nghiệm thu, từ <code>RULES.md</code> đã chốt.</li>
+      <li><strong>Cân RTP và mô phỏng GC</strong>: bỏ hẳn. Paytable và tần suất chép nguyên từ demo.</li>
+      <li><strong>Spine, asset ship thật</strong>: việc của art team; art vẽ bằng code chỉ là hình tạm.</li>
+      <li><strong>Port sang Cocos</strong> và <strong>màn hình dọc</strong>.</li>
+      <li><strong>Kiểm nhãn hiệu tên game</strong>: cần người làm pháp lý.</li>
+      <li>Feature không có trong game gốc.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+// Ticket definitions are fixed in the page. Live status (doing / done / stuck, plus a note) comes from
+// the board's database: collection "status", one doc per ticket id; run state in doc "meta/run".
+const T = [
+{id:"M1", title:"Mở mạng tới demo ELK", type:"unlock", who:"Bạn", blocked:[], chips:["một lần", "cài đặt môi trường"], body:`
+<p>Chính sách mạng của môi trường cloud này chặn <code>www.elk-studios.com</code> (proxy trả 403). Không có nó thì không chụp được màn luật, không quay được demo: ticket 12–13 và mọi thứ phía sau phải chờ.</p>
+<p>Cách mở: menu môi trường cloud trên thanh tiêu đề phiên → <b>Edit</b> → <b>Network access</b>. Hoặc chọn mức truy cập rộng hơn, hoặc thêm vào <b>Allowed domains</b> (giữ nguyên ô <i>Allow package managers</i>): <code>elk-studios.com</code>, <code>*.elk-studios.com</code>. Demo có thể tải game từ một host khác; ticket 12 sẽ tìm ra host đó và ghi vào đây nếu cần thêm.</p>
+<p>Nên thêm luôn các trang review để ticket 02 đọc được trang đầy đủ thay vì chỉ đoạn trích: <code>slotcatalog.com</code>, <code>sigma.world</code>, <code>casinos.com</code>, <code>slotstemple.com</code>.</p>
+<p>Hướng dẫn: <code>code.claude.com/docs/en/cloud-environments#network-access</code></p>
+<h4>Xong khi</h4><p>Từ container, mở đường dẫn demo trả về trang game, không phải 403. Claude tự kiểm và đánh dấu xong.</p>`},
+{id:"M2", title:"Đưa Orbitfall 4 và clone-kit vào phiên", type:"unlock", who:"Bạn", blocked:[], chips:["một lần", "GitHub"], body:`
+<p>Bản Mac dựng trên khung Orbitfall 4, <code>clone_kit.py</code> và <code>08_CLONE_GAME_WORKFLOW.md</code>. Ba thứ này nằm trên Mac. Repo của phiên này (<code>NunuRX78/NunuRX78_Doc</code>) không có chúng, và trong danh sách repo phiên đọc được chỉ có thêm <code>DunoDrake/IdleMagician</code>.</p>
+<p>Cách đưa vào, chọn một:</p>
+<ul><li>Push repo chứa Orbitfall 4 và clone-kit lên GitHub, cài Claude GitHub App cho repo đó, rồi gửi tên repo. Claude gắn nó vào phiên.</li>
+<li>Hoặc chép ba thứ đó vào <code>NunuRX78_Doc</code>, vào thư mục riêng.</li></ul>
+<p>Chỉ ticket 19 (khung code) cần cái này. Research, hạ tầng và chốt luật chạy trước được. Nếu bạn muốn bỏ hẳn Orbitfall và dựng khung mới, nói một câu; ticket 19 sẽ đổi phạm vi và M2 đóng lại.</p>
+<h4>Xong khi</h4><p>Khung Orbitfall 4 chạy được <code>npm run check</code> trong container.</p>`},
+{id:"M3", title:"Khoá Gemini làm secret của môi trường", type:"unlock", who:"Bạn", blocked:[], chips:["một lần", "cài đặt môi trường"], body:`
+<p>Cửa chấm art (08) và phép so khung hình (30) dùng Gemini vision. Khoá hiện nằm trong <code>~/.nano-banana/.env</code> trên Mac; container không đọc được. API Gemini thì đi được qua mạng của môi trường.</p>
+<p>Cách đặt: cài đặt môi trường cloud → <b>Environment variables / secrets</b> → thêm <code>GEMINI_API_KEY</code>. Đừng dán khoá vào chat hay vào repo.</p>
+<p>Chưa có khoá thì art vẫn vẽ được, nhưng không ảnh nào được vào game khi chưa qua cửa chấm. Không bao giờ bỏ cửa chấm để đi tiếp.</p>
+<h4>Xong khi</h4><p>Một ảnh thử gửi Gemini trả JSON <code>pass</code>/<code>reason</code>. Không ghi cứng tên model có số phiên bản; dùng bí danh <code>-latest</code>.</p>`},
+
+{id:"01", title:"Nguồn chính thức của ELK", type:"research", who:"Claude", blocked:[], chips:["research web"], body:`
+<p>Đọc mọi thứ ELK tự công bố về <b>World Eaters bản 1</b>: trang game, thông cáo ra mắt, game sheet cho nhà vận hành, trang luật công khai, bài đăng mạng xã hội. Nguồn hạng A.</p>
+<p>Trong cloud: tìm bằng WebSearch, đọc trang bằng công cụ đọc web. <code>elk-studios.com</code> đang bị chặn với lệnh trong container; nếu công cụ đọc web cũng không vào được thì chỉ có đoạn trích từ kết quả tìm kiếm. Con số chỉ có ở đoạn trích thì ghi "chưa đọc trang gốc", và đọc lại sau M1.</p>
+<p><b>Bẫy:</b> trang ELK hiện đẩy World Eaters 2 lên trước. Mỗi con số phải ghi rõ là của bản 1.</p>
+<p>Ghi vào <code>.scratch/world-eaters/research/01-elk.md</code>, commit và push.</p>
+<h4>Xong khi</h4><p>Có danh sách nguồn ELK kèm URL và ngày đọc; mỗi con số (lưới, biến động, thắng tối đa, hit rate, chế độ X-iter) có nguồn hạng A hoặc ghi "ELK không công bố" hoặc "chưa đọc trang gốc".</p>`},
+{id:"02", title:"Review và cơ sở dữ liệu slot", type:"research", who:"Claude", blocked:[], chips:["research web"], body:`
+<p>Gom từ SlotCatalog, casinos.com, SIGMA, Slotstemple, iGamingToday và các trang review khác. Mỗi ý ghi nguồn và hạng (B: database có số; C: review viết lời).</p>
+<p>Đã thấy ba chỗ lệch, ghi lại chứ không tự chọn: thắng tối đa <b>10.000×</b> ở hầu hết nguồn nhưng <b>€1.000.000</b> ở casinos.com; UFO ở base game theo nguồn này, ở free spins theo nguồn khác; ngày ra mắt 22·12·2025 (SlotCatalog) và 18·12·2025 (SIGMA).</p>
+<p>Ba trang cùng nói một câu vẫn có thể là chép của nhau. Trùng ý không làm câu đó lên hạng.</p>
+<h4>Xong khi</h4><p><code>research/02-reviews.md</code> có ít nhất 6 nguồn; mọi mâu thuẫn thành bảng: ý, nguồn nói gì, nguồn nào sẽ phân xử.</p>`},
+{id:"03", title:"Video gameplay trên mạng", type:"research", who:"Claude", blocked:[], chips:["research web"], body:`
+<p>Lập <b>bản đồ video</b> bản 1: feature nào, thế giới nào, ở link nào, phút thứ mấy. Ưu tiên thế giới 4–5 và vòng bonus nở lưới.</p>
+<p><b>Giới hạn thật:</b> phiên này đọc được tiêu đề, mô tả, chương, bình luận có mốc thời gian, transcript nếu công cụ đọc web lấy được; không xem được hình, và <code>youtube.com</code> bị chặn với lệnh trong container. Không tải video. Hình thật của game lấy từ demo ở ticket 13.</p>
+<h4>Xong khi</h4><p><code>research/03-videos.md</code> liệt kê video kèm mốc thời gian theo feature và thế giới; ghi rõ thế giới hay feature nào không tìm thấy video.</p>`},
+{id:"04", title:"Tổng hợp: bản mô tả gameplay", type:"research", who:"Claude", blocked:["01","02","03"], chips:["research web"], body:`
+<p>Viết <code>research/GAMEPLAY_BRIEF.md</code>: một ván từ lúc bấm spin tới lúc trả tiền, rồi từng phần: symbol và paytable đã biết, ăn symbol, cascade ngược, global multiplier, UFO, 5 thế giới và feature của mỗi thế giới, cách sang thế giới mới, bonus và lưới nở, X-iter.</p>
+<p>Mỗi câu mang hạng nguồn cao nhất đứng sau nó. Câu chỉ có hạng C là giả thuyết. Bản này <b>không thay màn luật trong game</b>.</p>
+<p>Cuối bản có ba danh sách: <b>câu hỏi mở</b> cho teardown; <b>khoảnh khắc cần quay</b>, xếp theo độ hiếm; <b>chủ đề 5 thế giới</b> của bản gốc, để art direction biết phải tránh giống cái gì.</p>
+<h4>Xong khi</h4><p>Một người chưa chơi đọc xong kể lại được một ván và luật sang thế giới; mỗi câu có hạng nguồn; đủ ba danh sách; mâu thuẫn từ 02 được mang sang.</p>`},
+
+{id:"05", title:"Bộ công cụ trong container", type:"task", who:"Claude", blocked:[], chips:["hạ tầng"], body:`
+<p class="was">Thay cho "Chạy từ Mac, mượn GPU máy bàn qua SSH". Container không có GPU và không gọi được máy bàn.</p>
+<p>Dựng <code>tools/</code> với các lệnh mà mọi ticket gọi:</p>
+<ul><li><b>chụp:</b> Chromium headless qua Playwright, chụp ảnh và chuỗi khung qua CDP screencast, ghi mốc thời gian từng khung;</li>
+<li><b>ghép video:</b> ffmpeg 6.1 ghép khung thành mp4, cắt clip theo mốc;</li>
+<li><b>vẽ sprite:</b> ma trận chỉ số palette (JSON) → PNG phóng to không làm mờ, kiểm mọi pixel thuộc palette;</li>
+<li><b>gen ảnh Gemini</b> (khi có M3): tuỳ chọn, ảnh ra luôn bị lượng tử về palette trước khi dùng.</li></ul>
+<p>WebGL trong container chạy bằng render phần mềm. Đo luôn ở ticket này: một trang canvas thử đạt bao nhiêu khung/giây. Con số này quyết định clip ở ticket 13 có dùng đo nhịp được không.</p>
+<h4>Xong khi</h4><p>Một lệnh chụp được một trang local; một sprite 16×16 ra PNG 128×128 đúng palette; 60 khung ghép thành mp4; có con số khung/giây của render phần mềm.</p>`},
+{id:"06", title:"Runner trong phiên cloud", type:"task", who:"Claude", blocked:[], chips:["hạ tầng"], body:`
+<p class="was">Thay cho "vá clone_kit.py run" chạy <code>claude -p</code> trên Mac.</p>
+<p>Runner là chính phiên này. Trạng thái nằm trong <code>.scratch/world-eaters/runner.json</code>, commit sau mỗi ticket. Luật chạy:</p>
+<ul><li>lấy ticket kế tiếp trong frontier; ticket hỏng 3 lần thì <b>kẹt</b>, ghi lý do, đi tiếp ticket không phụ thuộc nó;</li>
+<li>container bị thu hồi hoặc hết hạn mức thì không mất gì: lần đánh thức sau kéo nhánh về, đọc <code>runner.json</code>, chạy tiếp đúng chỗ;</li>
+<li>chỉ ghi trong <code>games/world-eaters/</code>, <code>tools/</code> và <code>.scratch/world-eaters/</code>. <code>expense-app</code> là việc khác trong repo này; một script kiểm trước commit chặn mọi thay đổi ngoài ba thư mục đó.</li></ul>
+<p>Nếu M2 mang <code>clone_kit.py</code> tới thì dùng định dạng ticket của nó, để hai board đọc chung được.</p>
+<h4>Xong khi</h4><p>Một ticket giả luôn hỏng bị đánh dấu kẹt sau 3 lần và runner đi tiếp; clone repo mới rồi chạy thì tiếp tục đúng chỗ; một thay đổi trong <code>expense-app</code> bị script kiểm chặn.</p>`},
+{id:"07", title:"Cố vấn Opus và bộ đếm lỗi", type:"task", who:"Claude", blocked:["06"], chips:["hạ tầng"], body:`
+<p>Opus được hỏi đúng ba lúc của mỗi ticket: <b>trước khi lập kế hoạch</b>, <b>khi cùng một lỗi gặp lần thứ hai</b>, <b>trước khi báo xong</b>. Trong cloud, mỗi lần hỏi là một subagent mới, loại chỉ đọc (không có công cụ ghi file), nhận bản tóm phiên đã cắt log dài.</p>
+<p>"Cùng một lỗi" do <b>máy đếm</b>: băm tên test trượt hoặc mã lỗi cộng file cộng dòng, lưu trong <code>runner.json</code>. Lần 2 thì hỏi Opus, lần 3 thì kẹt.</p>
+<p>Bản tóm giữ nguyên quyết định, dòng lỗi, stack trace; cắt đầu cuối khối output dài, ghi đường dẫn tới log đầy đủ.</p>
+<h4>Xong khi</h4><p>Trên một ticket thử, Opus được hỏi đúng ở ba mốc; một lỗi cố ý lặp lại kích hoạt lần hỏi thứ hai; lời khuyên lưu ở <code>.scratch/world-eaters/advice/</code>.</p>`},
+{id:"08", title:"Cửa chấm art bằng Gemini", type:"task", who:"Claude", blocked:["05","M3"], chips:["hạ tầng", "Gemini chấm"], body:`
+<p>Chấm mỗi ảnh qua bốn cửa, rẻ trước: đúng cỡ/tên/chỗ và mọi pixel thuộc palette (script thuần); đúng nội dung câu mô tả; đồng bộ với cả bộ; còn đọc được ở cỡ ô thật (ba cửa sau dùng Gemini vision).</p>
+<p>Gặp 429 thì ngủ rồi chạy tiếp, có trần thời gian ngủ. <b>Không bao giờ bỏ cửa chấm để đi tiếp.</b> Không tự chấm thay Gemini: người vẽ và người chấm phải là hai model khác nhau.</p>
+<h4>Xong khi</h4><p>Ảnh đồng xu thử qua đủ bốn cửa; ảnh sai cỡ trượt ở cửa 1 mà không tốn lượt gọi Gemini; ảnh sai nội dung trượt ở cửa 2 kèm lý do; 429 giả làm script chờ rồi chấm lại.</p>`},
+{id:"09", title:"Script đối chiếu RULE_TRACE", type:"task", who:"Claude", blocked:[], chips:["hạ tầng"], body:`
+<p>Script nằm trong <code>npm run check</code>, không cần LLM, đỏ khi: một nhãn trong <code>RULES.md</code> thiếu dòng trace; một dòng trace trỏ tới test không tồn tại hoặc đang <code>skip</code>; một nhãn trỏ tới chỗ không có trong tư liệu gốc; một nhãn mới chưa có trace (đỏ, không được xuống <code>KNOWN_DEBT</code>).</p>
+<p>Đặt ở <code>tools/rule-trace/</code> để game khác dùng lại; khi M2 mang clone-kit tới thì chuyển vào đó.</p>
+<h4>Xong khi</h4><p>Script có test trên bộ dữ liệu mẫu; mỗi điều kiện đỏ có một ca làm nó đỏ và một ca làm nó xanh.</p>`},
+{id:"10", title:"Lịch đánh thức, board tự cập nhật", type:"task", who:"Claude", blocked:["06","07"], chips:["hạ tầng"], body:`
+<p class="was">Thay cho launchd và caffeinate trên Mac.</p>
+<p>Một lịch chạy <b>hằng giờ</b> gửi tin vào chính phiên này. Mỗi lần thức: kéo nhánh, đọc <code>runner.json</code>, chạy ticket cho tới khi hết việc chạy được hoặc chạm hạn mức. Một giờ là khoảng ngắn nhất mà lịch cho phép.</p>
+<p>Sau mỗi ticket, runner ghi trạng thái vào database của board này (<code>status/&lt;id&gt;</code>) và dòng trạng thái chạy ở đầu trang (<code>meta/run</code>). Không cần publish lại trang, nên mở board là thấy tiến độ.</p>
+<h4>Xong khi</h4><p>Lịch đã tạo và đánh thức phiên đúng giờ ít nhất hai lần; board đổi theo sau khi một ticket thử xong; một phiên bị thu hồi container vẫn chạy tiếp ở lần thức sau.</p>`},
+{id:"11", title:"Khởi tạo effort world-eaters", type:"task", who:"Claude", blocked:["10"], chips:["chạy không người"], body:`
+<p>Có clone-kit (M2) thì chạy <code>clone_kit.py new world-eaters</code>; chưa có thì dựng cùng cấu trúc bằng tay: <code>.scratch/world-eaters/issues/</code>, <code>map.md</code>, <code>SOURCES.md</code>. Mọi ticket owner là Claude.</p>
+<h4>Xong khi</h4><p><code>map.md</code> điền xong từ <code>GAMEPLAY_BRIEF.md</code>; file ticket khớp board này; ticket kế tiếp runner chỉ ra là chụp màn luật.</p>`},
+{id:"12", title:"Chụp màn luật và paytable từ demo ELK", type:"task", who:"Claude", blocked:["11","04","M1"], chips:["chạy không người"], body:`
+<p>Demo chính thức: <code>gameid=10255</code>, <code>mode=demo</code>. Bản Mac đã thử: không cổng tuổi, không điều khoản. Dùng Chromium headless trong container, chụp toàn bộ màn Rules và paytable, lưu <code>ref/</code> với tiền tố <code>REF-</code>.</p>
+<p>Ghi lại mọi host mà demo tải tài nguyên từ đó. Host nào bị chặn thì ghi vào M1 để bạn thêm.</p>
+<p><b>Banner cookie chỉ có nút "I accept".</b> Không bấm: mở thẳng đường dẫn demo. <b>Không vượt CAPTCHA</b>, không đăng nhập, không bấm đồng ý điều khoản; gặp thì ticket kẹt và ghi rõ.</p>
+<p>Chụp dòng <i>Last updated</i> cuối màn luật.</p>
+<h4>Xong khi</h4><p>Mọi trang Rules có ảnh; mỗi symbol có ảnh paytable; có ảnh dòng phiên bản; <code>SOURCES.md</code> đủ.</p>`},
+{id:"13", title:"Quay video demo, autoplay dài", type:"task", who:"Claude", blocked:["11","04","M1"], chips:["chạy không người"], body:`
+<p>Quay demo bằng Chromium headless (khung qua CDP, ghép bằng ffmpeg). Ghi lại: ăn symbol, cascade ngược, global multiplier, UFO, chuyển thế giới, bonus với lưới nở, Big Win, feature của <b>cả 5 thế giới</b>.</p>
+<p><b>Bẫy lớn nhất:</b> mỗi thế giới cần 3 lần kích hoạt mới sang thế giới sau; tới thế giới 5 có thể mất hàng giờ. Cho autoplay chạy nền nhiều giờ, chỉ giữ đoạn có sự kiện. Thử trước xem X-iter có nhảy thẳng vào thế giới sau không.</p>
+<p><b>Rủi ro riêng của cloud:</b> không GPU, game render bằng phần mềm có thể chậm hơn máy thật. Mỗi clip ghi khung/giây và mốc thời gian thật. Clip nào bị chậm thì vẫn dùng để đọc luật, nhưng ghi "không dùng đo nhịp", và ticket 27 không được lấy nó làm chuẩn thời lượng.</p>
+<h4>Xong khi</h4><p>Mỗi feature trong màn luật có ít nhất 1 clip; có clip cả 5 thế giới hoặc ghi rõ thế giới nào không tới được sau bao nhiêu spin; mỗi clip ghi khung/giây; danh sách trong <code>SOURCES.md</code>.</p>`},
+{id:"14", title:"Teardown luật thành RULES.md có nhãn", type:"task", who:"Claude", blocked:["12","04"], chips:["chạy không người"], body:`
+<p>Chép luật từ ảnh màn luật thành <code>RULES.md</code>, mỗi câu một nhãn: <code>[ELK]</code> nguyên văn màn luật, <code>[SUY]</code> suy ra, <code>[MỞ]</code> chưa biết. Câu từ trang review là <code>[SUY]</code>, kể cả khi ba trang cùng nói.</p>
+<p><b>Bẫy:</b> cascade đi <b>ngược lên</b>. Hệ quy chiếu phải nói rõ "rơi" là hướng nào, nếu không mọi luật về chỗ symbol mới mọc bị đọc ngược và test xanh theo cách đọc ngược đó.</p>
+<h4>Xong khi</h4><p>Mọi câu có nhãn; có hệ quy chiếu; có <code>CONTEXT.md</code>; có danh sách <code>[MỞ]</code>/<code>[SUY]</code> kèm cách giải.</p>`},
+{id:"15", title:"Đếm video để giải chỗ còn mở", type:"research", who:"Claude", blocked:["13","14"], chips:["chạy không người"], body:`
+<p>Giải từng <code>[MỞ]</code> bằng khung hình tách từ clip (Claude đọc được ảnh): đếm symbol bị ăn, xem symbol mới mọc ở đâu, đo hệ số nhân tăng ra sao, lưới nở thêm mấy hàng.</p>
+<p>Câu phải trả lời vì nó đổi hợp đồng vòng chơi: <b>tiến độ thế giới có được giữ giữa các lượt spin không?</b> Kiểm bằng cách tải lại demo xem có về thế giới 1 không.</p>
+<h4>Xong khi</h4><p>Mọi <code>[MỞ]</code> giải được bằng video đã giải, cái còn lại ghi rõ vì sao; câu về trạng thái giữa các spin có câu trả lời kèm khung hình làm bằng chứng.</p>`},
+{id:"16", title:"Bản đọc độc lập: Opus viết RULE_TRACE", type:"task", who:"Opus (subagent)", blocked:["07","12","13"], chips:["chạy không người"], body:`
+<p>Tính độc lập đến từ một <b>subagent Opus mới, chỉ được giao bản sao ảnh màn luật và khung clip</b> trong một thư mục riêng ngoài repo, không có quyền ghi, được dặn không mở <code>RULES.md</code> hay code. Nó tự viết bản trace của nó.</p>
+<p><b>Nói thẳng:</b> yếu hơn người đọc. Cùng họ model có thể đọc sai giống nhau, và subagent vẫn có công cụ đọc file nên lời dặn là rào chắn mềm. Nhưng nó vẫn bắt được lỗi phổ biến nhất: một phiên đọc sai rồi tự viết test khớp cách đọc sai của mình.</p>
+<h4>Xong khi</h4><p><code>RULE_TRACE.md</code> có một dòng cho mỗi luật thấy được trong màn luật, mỗi dòng trỏ tới ảnh và vị trí; báo cáo của subagent liệt kê các file nó đã mở, và không có <code>RULES.md</code> hay thư mục code.</p>`},
+{id:"17", title:"Chốt luật: đối chiếu hai bản đọc", type:"task", who:"Claude", blocked:["15","16"], chips:["chạy không người"], body:`
+<p>Đặt <code>RULES.md</code> (14–15) cạnh <code>RULE_TRACE.md</code> (16). Khớp thì chốt. Lệch thì giải bằng video; không đủ thì chốt thành <code>[D##]</code> kèm lý do một câu, ghi vào danh sách "quyết định máy tự chốt".</p>
+<p>Chốt danh sách feature và khoảnh khắc VFX, tách ticket 22 và 27 theo đó. Quy mô: 5 feature thế giới, UFO, bonus, khoảng 7–8 engine feature.</p>
+<p>Hỏi Opus trước khi báo xong: sai một chỗ ở đây thì mọi thứ phía sau sai theo.</p>
+<h4>Xong khi</h4><p>0 <code>[MỞ]</code>, 0 <code>[SUY]</code> trong luật lõi; mỗi chỗ lệch có cách giải; <code>RULES.md</code> v1 có ngày chốt; đã tách ticket 22 và 27.</p>`},
+{id:"18", title:"Chốt art direction và tên game", type:"task", who:"Claude", blocked:["11","04"], chips:["chạy không người"], body:`
+<p>Không dùng tên, logo, art, âm thanh hay chữ của ELK. Mặc định: giữ ý "quái vật ăn thế giới", vẽ lại hoàn toàn bằng pixel art theo chuẩn Orbitfall. Năm thế giới, mỗi thế giới một câu mô tả và một palette, không trùng chủ đề Whale, Pipe, Fireworks, Trees &amp; Forest, Volcano của bản gốc.</p>
+<p>Art ở board này vẽ bằng code, nên palette và hình khối phải đơn giản đủ để vẽ tay bằng ma trận: ít màu, hình rõ ở 16×16 và 32×32.</p>
+<p>Tên game: chọn một tên, tìm trên web xem có slot trùng tên không. <b>Máy không kiểm được nhãn hiệu.</b></p>
+<h4>Xong khi</h4><p>Có tên game, kết quả tìm trùng tên, đoạn mô tả chủ đề, một câu và một palette cho mỗi thế giới, ghi trong <code>map.md</code>.</p>`},
+{id:"19", title:"Dựng khung code từ Orbitfall 4", type:"task", who:"Claude", blocked:["11","M2"], chips:["chạy không người"], body:`
+<p>Lấy khung Orbitfall 4: engine tách khỏi renderer, RGS, contract, hệ VFX pixel, synth âm thanh, HUD, cheat. Gỡ toàn bộ luật Orbitfall. Đặt ở <code>games/world-eaters/</code>.</p>
+<p><b>Hai bẫy:</b> Orbitfall lưới 6×8 cố định, World Eaters 5×5 và nở trong bonus; Orbitfall rơi xuống, World Eaters dâng lên. Cỡ lưới và hướng rơi là tham số ngay từ đầu. Cửa kiểm cell-size của Orbitfall có thể giả định lưới cố định; kiểm nó trước khi tin nó xanh.</p>
+<h4>Xong khi</h4><p><code>npm run check</code> xanh trên khung rỗng; dev server hiện lưới 5×5, chụp được bằng Chromium headless; đổi sang 5×7 vẫn vẽ đúng; test layering đỏ khi thử import <code>pixi.js</code> vào <code>src/engine/</code>.</p>`},
+{id:"20", title:"Hợp đồng vòng chơi", type:"task", who:"Claude", blocked:["17","19"], chips:["chạy không người"], body:`
+<p>Các bước server trả về và client phát lại: ăn symbol, cascade ngược, đổi hệ số nhân, cộng tiến độ thế giới, chuyển thế giới, UFO, nở lưới, bonus. Nếu ticket 15 kết luận tiến độ được giữ giữa các spin, hợp đồng phải mang trạng thái đó ngay bây giờ.</p>
+<h4>Xong khi</h4><p>Mỗi feature có ít nhất 1 step type; test contract e2e kiểm số học số dư; có golden contract.</p>`},
+{id:"21", title:"Engine luật lõi", type:"task", who:"Claude", blocked:["09","20"], chips:["chạy không người"], body:`
+<p>Lưới 5×5, ăn symbol và trả thưởng, cascade ngược, global multiplier, đếm kích hoạt và tiến thế giới. Mỗi luật một test mang đúng nhãn. Paytable chép nguyên; <b>không cân RTP</b>. Script RULE_TRACE đỏ thì không được sửa <code>RULE_TRACE.md</code> cho xanh.</p>
+<h4>Xong khi</h4><p>Mỗi luật lõi có test mang nhãn; <code>npm run check</code> xanh, không thêm <code>KNOWN_DEBT</code>; 10.000 ván không lỗi, không âm, không vượt Win Cap.</p>`},
+{id:"22", title:"Engine feature: 5 thế giới, UFO, bonus", type:"task", who:"Claude", blocked:["21"], chips:["chạy không người"], body:`
+<p>Tách ở ticket 17 thành một ticket cho mỗi feature. Luật chỉ dựa trên suy luận giữ nhãn <code>[D##]</code>, không đổi thành <code>[ELK]</code>.</p>
+<h4>Xong khi</h4><p>Mọi luật của mỗi feature có test; step type tương ứng có trong contract; <code>npm run check</code> xanh sạch.</p>`},
+{id:"23", title:"Cheat và kịch bản", type:"task", who:"Claude", blocked:["22"], chips:["chạy không người"], body:`
+<p>Mỗi feature một cheat đưa thẳng tới nó, kể cả "đang ở thế giới 4, còn 1 lần kích hoạt nữa". Trong cloud việc này càng quan trọng: render phần mềm chậm, không có cheat thì ticket sau phải spin rất lâu mới thấy thế giới cuối.</p>
+<h4>Xong khi</h4><p><code>cheat.open()</code> liệt kê đủ feature và 5 thế giới; test kịch bản cheat xanh.</p>`},
+{id:"24", title:"Greybox chơi được", type:"task", who:"Claude", blocked:["23"], chips:["chạy không người"], body:`
+<p>Toàn bộ game bằng hình khối xám: spin, autoplay, turbo, đổi bet, mọi cheat. Chơi bằng Chromium headless có script bấm nút.</p>
+<h4>Xong khi</h4><p>Mọi cheat diễn trọn, không treo; soak 500 spin autoplay, console sạch; có screenshot mỗi feature và mỗi thế giới.</p>`},
+{id:"25", title:"Palette và bộ symbol", type:"task", who:"Claude", blocked:["05","08","17","18"], chips:["chạy không người", "vẽ bằng code", "Gemini chấm"], body:`
+<p class="was">Bản Mac gen bằng Retro Diffusion trên GPU máy bàn. Cloud không có GPU.</p>
+<p>Dựng palette trước. Mỗi symbol là một ma trận chỉ số palette do Claude vẽ, render bằng công cụ của ticket 05. Có khoá Gemini thì có thể gen ảnh phác rồi lượng tử về palette và vẽ lại bằng tay. Mọi ảnh qua cửa chấm của ticket 08.</p>
+<p>Thay cho bạn duyệt ảnh đầu: Gemini so bộ mới cạnh bộ symbol Orbitfall đã chốt (cần M2 để có bộ đó; không có thì so trong nội bộ bộ mới), rồi subagent Opus xem lại cả bộ. <b>Máy chấm được đúng và đồng bộ; máy không chấm được đẹp.</b> Vẽ bằng ma trận sẽ thô hơn ảnh RD; báo cáo ghi rõ.</p>
+<h4>Xong khi</h4><p>Đủ symbol trong manifest, mỗi ảnh qua bốn cửa; có ảnh ghép cả bộ trên nền; guard pixel-art xanh; có nhận xét của Opus.</p>`},
+{id:"26", title:"Nền 5 thế giới, khung, HUD art", type:"task", who:"Claude", blocked:["25"], chips:["chạy không người", "vẽ bằng code", "Gemini chấm"], body:`
+<p>Năm nền theo ticket 18, nền bonus, khung lưới, HUD. Nền lớn vẽ bằng code theo lớp (trời, xa, gần, chi tiết) với palette của từng thế giới. Lưới nở trong bonus nên khung phải giãn được, ghép từ mảnh 9-slice.</p>
+<h4>Xong khi</h4><p>Screenshot base game ở cả 5 thế giới và bonus; không còn ô xám greybox; khung đúng ở lưới thường và lưới đã nở; mọi ảnh qua cửa chấm.</p>`},
+{id:"27", title:"VFX đối chiếu, làm bằng code", type:"task", who:"Claude", blocked:["13","24","26"], chips:["chạy không người"], body:`
+<p>Hiệu ứng làm bằng code trên hệ VFX pixel của Orbitfall. Mỗi khoảnh khắc đặt cạnh clip gốc, đo từng pha. "Ăn symbol" và "cascade ngược" là cảm giác riêng của game này, đáng làm kỹ nhất.</p>
+<p>Đo thời lượng bằng đồng hồ của game (mốc thời gian trong timeline), không bằng số khung quay được, vì render phần mềm làm rớt khung. Chỉ so với clip mà ticket 13 đánh dấu dùng được để đo nhịp.</p>
+<h4>Xong khi</h4><p>Tổng thời lượng mỗi khoảnh khắc lệch ≤ 20% so với clip gốc; mỗi pha có pha tương ứng; ảnh so sánh ở <code>ref/frames/</code>; <code>docs/VFX_TIMING.md</code> cập nhật.</p>`},
+{id:"28", title:"Âm thanh synth", type:"task", who:"Claude", blocked:["24"], chips:["chạy không người"], body:`
+<p>Âm thanh tổng hợp bằng Web Audio, không file ngoài, không lấy âm thanh của ELK. Claude không nghe được, nên mỗi âm được render offline trong Chromium headless rồi kiểm bằng số: độ dài, đỉnh âm lượng không vỡ tiếng, dải tần, không câm.</p>
+<h4>Xong khi</h4><p>Mỗi step type có âm hoặc ghi "im lặng có chủ ý"; mỗi âm có bản render offline qua kiểm số; không lỗi AudioContext khi tải trang.</p>`},
+{id:"29", title:"HUD, màn luật, X-iter, Big Win", type:"task", who:"Claude", blocked:["24"], chips:["chạy không người"], body:`
+<p>Màn luật và paytable đọc thẳng từ config. Menu X-iter đúng các chế độ và giá mà màn luật liệt kê. Big Win có bậc và đếm số.</p>
+<h4>Xong khi</h4><p>Mọi con số trên màn luật khớp config; mọi nút HUD chạy bằng chuột và bàn phím (kiểm bằng script); mỗi chế độ X-iter mua được và vào đúng chế độ.</p>`},
+{id:"30", title:"Kiểm cảm giác bằng máy, thay cho chơi thử", type:"task", who:"Claude", blocked:["27","28","29"], chips:["chạy không người", "Gemini chấm"], body:`
+<p>Ba phép đo máy làm được:</p>
+<ul><li><b>Nhịp:</b> số spin mỗi phút, thời lượng trình diễn mỗi loại thắng, đo bằng đồng hồ game trên cả bản chép và clip gốc.</li>
+<li><b>Khung hình cặp đôi:</b> mỗi khoảnh khắc, khung tương ứng từ clip gốc và bản chép, Gemini so xem thiếu pha nào, chỗ nào đọc khó hơn.</li>
+<li><b>Subagent Opus</b> đọc kết quả hai phép trên và screenshot, viết nhận xét.</li></ul>
+<p><b>Nói thẳng:</b> đây là đại diện, không phải cảm giác thật. Máy không biết game có <b>đã tay</b> hay không. Chỗ lệch thành ticket sửa; phần còn lại vào báo cáo như "chưa có người chơi thử".</p>
+<h4>Xong khi</h4><p>Có bảng nhịp hai bên cho mọi loại thắng; có cặp khung cho mọi khoảnh khắc kèm nhận xét Gemini; mỗi chỗ lệch thành ticket sửa hoặc ghi lý do chấp nhận.</p>`},
+{id:"31", title:"Nghiệm thu và bàn giao", type:"task", who:"Claude", blocked:["30"], chips:["chạy không người"], body:`
+<p>Đối chiếu đủ ba cột "Chơi được / Đúng logic / Đẹp" của <code>08_CLONE_GAME_WORKFLOW.md</code> (có từ M2). "Xanh" chỉ tính khi không thêm <code>KNOWN_DEBT</code>. Hỏi Opus trước khi báo xong. Mọi thứ đã push lên nhánh; container có mất cũng không mất gì.</p>
+<p>Báo cáo cuối có ba danh sách: quyết định máy tự chốt, ticket từng kẹt và cách gỡ, những gì máy không chấm được (gồm: art vẽ bằng code thay cho RD, nhịp đo trên render phần mềm).</p>
+<h4>Xong khi</h4><p>Script RULE_TRACE xanh; <code>npm run check</code> xanh sạch; soak 1.000 spin không lỗi; build chạy; bảng ba cột đạt đủ; một phiên Claude mới chỉ đọc <code>AGENTS.md</code> sửa được một số trong paytable và chạy check mà không phải hỏi.</p>`}
+];
+
+const COLS = [
+  ["ready", "Làm được ngay", "Mọi thứ chặn nó đã xong"],
+  ["doing", "Đang làm", "Runner đang chạy"],
+  ["waiting", "Đang chờ", "Còn ticket hoặc việc mở khoá chưa xong"],
+  ["stuck", "Kẹt", "Hỏng 3 lần hoặc gặp chỗ máy không vượt được"],
+  ["done", "Xong", ""],
+];
+const TYPE = { task: "Việc làm", research: "Research", unlock: "Mở khoá" };
+const KEY = "board-world-eaters-cloud-open";
+const byId = Object.fromEntries(T.map(t => [t.id, t]));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let live = {};          // id -> {col, note, updated} from the database
+let open = null;
+try { open = localStorage.getItem(KEY); } catch (e) {}
+
+function stateOf(t) {
+  const s = live[t.id];
+  if (s && ["doing", "done", "stuck"].includes(s.col)) return s.col;
+  const allDone = (t.blocked || []).every(b => stateOf(byId[b]) === "done");
+  return allDone ? "ready" : "waiting";
+}
+const isMine = t => t.type === "unlock";
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const p = n => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())} · ${p(d.getDate())}/${p(d.getMonth() + 1)}`;
+}
+
+function card(t) {
+  const st = stateOf(t);
+  const s = live[t.id];
+  const blk = (t.blocked || []).map(b => {
+    const dn = stateOf(byId[b]) === "done";
+    return `<span class="chip blk ${dn ? "" : "open"} ${b.startsWith("M") ? "unlock" : ""}" title="${esc(byId[b].title)}">chờ ${esc(b)}</span>`;
+  }).join("");
+  const extra = (t.chips || []).map(c => `<span class="chip">${esc(c)}</span>`).join("");
+  const note = s && s.note ? `<div class="status-note ${st === "stuck" ? "stuck" : st === "done" ? "done" : ""}">${esc(s.note)}${s.updated ? ` · ${esc(fmtTime(s.updated))}` : ""}</div>` : "";
+  const body = open === t.id ? `<div class="detail">${t.body}</div>` : "";
+  return `<button class="card ${isMine(t) ? "mine" : ""}" data-id="${esc(t.id)}" aria-expanded="${open === t.id}">
+    <div class="top"><span class="id">${esc(t.id)}</span><span class="t">${esc(t.title)}</span></div>
+    <div class="chips"><span class="chip ${isMine(t) ? "you" : "cloud"}">${esc(t.who)}</span><span class="chip">${esc(TYPE[t.type] || t.type)}</span>${extra}${blk}</div>
+    ${note}${body}</button>`;
+}
+
+function render() {
+  const states = Object.fromEntries(T.map(t => [t.id, stateOf(t)]));
+  document.getElementById("view-board").innerHTML = COLS.map(([k, name, hint]) => {
+    const list = T.filter(t => states[t.id] === k);
+    return `<div class="col"><h2><i style="background:var(--${k})"></i>${name}<span class="n">${list.length}</span></h2>
+      ${hint ? `<div class="hint">${hint}</div>` : ""}
+      ${list.length ? list.map(card).join("") : `<div class="empty">Chưa có ticket nào.</div>`}</div>`;
+  }).join("");
+  const prog = document.getElementById("progress");
+  prog.style.gridTemplateColumns = `repeat(${T.length}, 1fr)`;
+  prog.innerHTML = T.map(t => {
+    const st = states[t.id];
+    const cls = st === "ready" && isMine(t) ? "you" : st;
+    return `<span class="${cls}" title="${esc(t.id)} · ${esc(t.title)}"></span>`;
+  }).join("");
+  const n = c => T.filter(t => states[t.id] === c).length;
+  const mineOpen = T.filter(t => isMine(t) && states[t.id] !== "done").length;
+  document.getElementById("stats").innerHTML = [
+    `<span><b>${n("done")}/${T.length}</b> xong</span>`,
+    `<span><b>${T.filter(t => !isMine(t) && states[t.id] === "ready").length}</b> Claude làm được ngay</span>`,
+    `<span><b>${n("doing")}</b> đang làm</span>`,
+    `<span><b>${n("stuck")}</b> kẹt</span>`,
+    `<span><b>${mineOpen}</b> việc mở khoá còn chờ bạn</span>`,
+  ].join("");
+}
+render();
+
+document.getElementById("view-board").addEventListener("click", e => {
+  const c = e.target.closest(".card"); if (!c) return;
+  open = open === c.dataset.id ? null : c.dataset.id;
+  try { open ? localStorage.setItem(KEY, open) : localStorage.removeItem(KEY); } catch (e) {}
+  render();
+});
+
+function setRun(phase, when, msg, isLive) {
+  document.getElementById("run-phase").textContent = phase;
+  document.getElementById("run-when").textContent = when;
+  document.getElementById("run-msg").textContent = msg || "";
+  document.getElementById("run").classList.toggle("live", !!isLive);
+}
+
+(async () => {
+  const db = window.claude && window.claude.use ? await window.claude.use("db") : null;
+  if (!db) {
+    setRun("Không tải được trạng thái trực tiếp", "", "Board vẫn hiện thứ tự ticket; tiến độ thật chỉ hiện khi mở trên claude.ai và đã đăng nhập.", false);
+    return;
+  }
+  let gotStatus = false, gotRun = false;
+  const timer = setTimeout(() => {
+    if (!gotRun) setRun("Chưa kết nối được database của board", "", "Thử mở lại sau. Thứ tự ticket bên dưới vẫn đúng.", false);
+  }, 10000);
+  db.collection("status").onSnapshot(snap => {
+    gotStatus = true;
+    const next = {};
+    snap.docs.forEach(d => { if (d.exists) next[d.id] = d.data(); });
+    live = next;
+    render();
+  }, () => {});
+  db.doc("meta/run").onSnapshot(snap => {
+    gotRun = true;
+    if (!snap.metadata || !snap.metadata.fromCache) clearTimeout(timer);
+    if (!snap.exists) { setRun("Runner chưa chạy lần nào", "", "", false); return; }
+    const r = snap.data() || {};
+    setRun(r.phase || "Runner", r.updated ? `cập nhật ${fmtTime(r.updated)}` : "", r.note || "", r.live === true);
+  }, () => { clearTimeout(timer); setRun("Không đọc được trạng thái chạy", "", "", false); });
+})();
+</script>
