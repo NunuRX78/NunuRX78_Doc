@@ -38,6 +38,16 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Stamp version
+        # nativeHash đổi khi plugin, cấu hình hoặc icon đổi: lúc đó cần cài APK mới, còn lại chỉ cần gói web.
+        run: |
+          VERSION="1.0.${{ github.run_number }}"
+          NATIVE_HASH=$(cat package.json capacitor.config.json assets/* | sha256sum | cut -c1-12)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "NATIVE_HASH=$NATIVE_HASH" >> "$GITHUB_ENV"
+          printf "window.QJ_VERSION = { web: '%s', nativeHash: '%s' };\n" "$VERSION" "$NATIVE_HASH" > www/version.js
+          cat www/version.js
+
       - name: Create Android project
         run: |
           npx cap add android
@@ -64,12 +74,20 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
           mkdir -p ../dist
-          cp app/build/outputs/apk/debug/app-debug.apk ../dist/QuestJournal-1.0.${{ github.run_number }}.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../dist/QuestJournal-$VERSION.apk
+
+      - name: Package web bundle and update manifest
+        run: |
+          (cd www && zip -qr ../dist/www-$VERSION.zip .)
+          BASE="https://github.com/${{ github.repository }}/releases/download/quest-journal-v$VERSION"
+          printf '{"version":"%s","nativeHash":"%s","zip":"%s/www-%s.zip","apk":"%s/QuestJournal-%s.apk"}\n' \
+            "$VERSION" "$NATIVE_HASH" "$BASE" "$VERSION" "$BASE" "$VERSION" > dist/update.json
+          cat dist/update.json
 
       - uses: actions/upload-artifact@v4
         with:
           name: QuestJournal-apk
-          path: game-studio/src/quest-journal/dist/*.apk
+          path: game-studio/src/quest-journal/dist/
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -77,8 +95,15 @@ jobs:
           tag_name: quest-journal-v1.0.${{ github.run_number }}
           name: Quest Journal 1.0.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          prerelease: true
+          prerelease: false
+          make_latest: true
           body: |
             File APK của Quest Journal. Tải file `.apk` bên dưới về điện thoại Android rồi mở để cài
             (cho phép "Cài ứng dụng không rõ nguồn gốc" nếu máy hỏi).
-          files: game-studio/src/quest-journal/dist/*.apk
+
+            App đã cài sẽ tự tải bản mới qua `update.json` và gói `www-*.zip`, không cần cài lại APK
+            trừ khi app báo "Có bản cài đặt mới".
+          files: |
+            game-studio/src/quest-journal/dist/*.apk
+            game-studio/src/quest-journal/dist/*.zip
+            game-studio/src/quest-journal/dist/update.json

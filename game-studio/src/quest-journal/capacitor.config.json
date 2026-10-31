@@ -7,6 +7,14 @@
     "SystemBars": {
       "insetsHandling": "css",
       "style": "DARK"
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "updateUrl": "",
+      "channelUrl": "",
+      "statsUrl": "",
+      "resetWhenUpdate": true,
+      "appReadyTimeout": 15000
     }
   }
 }

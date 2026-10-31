@@ -8,6 +8,8 @@ không bundler) được đóng gói thành APK Android bằng Capacitor.
 | `www/config.js` | Toàn bộ thông số cân bằng: XP/giờ, vàng/giờ, đường cong cấp, cửa hàng |
 | `www/logic.js` | Luật game thuần, không đụng DOM (test ở `game-studio/tests/unit/quest-journal/`) |
 | `www/app.js` | Giao diện, hiệu ứng, âm thanh WebAudio, lưu trữ (Capacitor Preferences / localStorage) |
+| `www/updater.js` | Tự cập nhật: đọc `update.json` của release mới nhất, tải gói web bằng `@capgo/capacitor-updater` |
+| `www/version.js` | Phiên bản và `nativeHash`, CI ghi đè khi build |
 | `assets/` | Ảnh gốc để sinh icon và splash |
 
 ## Chạy thử
@@ -29,3 +31,15 @@ npx cap add android
 npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
+
+## Tự cập nhật
+
+Giống `expense-app` (service worker luôn lấy bản mới từ mạng), nhưng cho APK. Mỗi release có thêm
+`www-<version>.zip` và `update.json`. Khi mở app, `updater.js` đọc
+`releases/latest/download/update.json`:
+
+- **Cùng `nativeHash`** (chỉ đổi HTML/CSS/JS): tải gói web, dùng từ lần mở sau hoặc ngay khi bấm
+  "Cập nhật ngay". Không cài lại APK, dữ liệu giữ nguyên.
+- **Khác `nativeHash`** (đổi `package.json`, `capacitor.config.json` hoặc `assets/`): hiện nút "Tải APK".
+
+Gói web lỗi không gọi được `notifyAppReady()` trong 15 giây thì plugin tự quay về gói trước đó.

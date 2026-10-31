@@ -606,6 +606,12 @@
 
     showScreen('quests');
     checkStreak();
+
+    if (window.QJUpdater) {
+      $('appVersion').textContent = window.QJUpdater.version.web;
+      $('checkUpdate').addEventListener('click', () => { Sfx.unlock(); Sfx.tap(); window.QJUpdater.check(true); });
+      window.QJUpdater.init({ toast });
+    }
   }
 
   init();

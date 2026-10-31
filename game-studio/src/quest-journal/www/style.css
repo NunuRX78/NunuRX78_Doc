@@ -224,3 +224,14 @@ body:not(.on-quests) .fab { display: none; }
 }
 .sub-active { color: var(--accent); padding: 4px 6px; font-size: 18px; }
 .shop-item .btn { flex: none; min-width: 96px; }
+
+/* Phiên bản và cập nhật */
+.about { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 8px 10px; color: var(--muted); border: var(--px) dashed var(--border); }
+.about b { color: var(--text); font-weight: normal; }
+.update-banner {
+  position: fixed; left: 12px; right: 12px; top: calc(var(--sat) + 8px); z-index: 25;
+  max-width: 536px; margin: 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  background: var(--panel-2); border: var(--px) solid var(--gold); box-shadow: 0 0 0 var(--px) var(--border-dark), 0 6px 0 rgba(0,0,0,.35);
+  animation: fadeIn .25s;
+}
+.update-banner span { flex: 1; }

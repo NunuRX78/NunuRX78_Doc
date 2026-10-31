@@ -49,6 +49,10 @@
           <div class="hero-level" id="heroLevel"></div>
         </div>
         <div class="stats-grid" id="statsGrid"></div>
+        <div class="about">
+          <span>Phiên bản <b id="appVersion">dev</b></span>
+          <button class="btn small ghost" id="checkUpdate">⟳ Kiểm tra cập nhật</button>
+        </div>
         <div class="tips">
           <h3>📖 Luật của Wyatt Cheng</h3>
           <ol>
@@ -98,8 +102,10 @@
   <div id="fx" aria-hidden="true"></div>
   <div class="toast" id="toast" role="status"></div>
 
+  <script src="version.js"></script>
   <script src="config.js"></script>
   <script src="logic.js"></script>
+  <script src="updater.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
