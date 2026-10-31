@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.nunurx78.questjournal",
+  "appName": "Quest Journal",
+  "webDir": "www",
+  "backgroundColor": "#1b1426",
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "DARK"
+    }
+  }
+}

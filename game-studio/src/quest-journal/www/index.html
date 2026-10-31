@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#1b1426">
+  <title>Quest Journal</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="hud">
+      <div class="hud-avatar" id="hudAvatar" aria-hidden="true"></div>
+      <div class="hud-main">
+        <div class="hud-row">
+          <span class="hud-level" id="hudLevel">LV 1</span>
+          <span class="hud-title" id="hudTitle">Tân Binh</span>
+        </div>
+        <div class="xpbar" aria-label="Thanh kinh nghiệm"><div class="xpbar-fill" id="xpFill"></div><span class="xpbar-text" id="xpText">0 / 100 XP</span></div>
+      </div>
+      <div class="hud-stats">
+        <span class="stat" id="hudGold" title="Vàng">🪙 0</span>
+        <span class="stat" id="hudStreak" title="Chuỗi ngày">🔥 0</span>
+      </div>
+    </header>
+
+    <main id="screens">
+      <section class="screen active" id="screen-quests" aria-label="Nhiệm vụ">
+        <h2 class="section-title">⚔ Đang làm</h2>
+        <div id="activeSlot"></div>
+        <h2 class="section-title">📜 Nhật ký nhiệm vụ <span class="count" id="openCount"></span></h2>
+        <ul class="quest-list" id="questList"></ul>
+        <details class="done-box" id="doneBox">
+          <summary>✔ Đã hoàn thành <span class="count" id="doneCount"></span></summary>
+          <ul class="quest-list done" id="doneList"></ul>
+        </details>
+      </section>
+
+      <section class="screen" id="screen-shop" aria-label="Cửa hàng">
+        <h2 class="section-title">🛒 Cửa hàng</h2>
+        <p class="hint">Hoàn thành quest để kiếm vàng, rồi đổi lấy danh hiệu, áo choàng và thú cưng.</p>
+        <div id="shopList"></div>
+      </section>
+
+      <section class="screen" id="screen-hero" aria-label="Hồ sơ">
+        <div class="hero-card">
+          <div class="hero-big" id="heroBig" aria-hidden="true"></div>
+          <div class="hero-name" id="heroTitle"></div>
+          <div class="hero-level" id="heroLevel"></div>
+        </div>
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="tips">
+          <h3>📖 Luật của Wyatt Cheng</h3>
+          <ol>
+            <li>Ghi hết ý tưởng ra danh sách, đừng giữ trong đầu.</li>
+            <li>Chia nhỏ việc lớn: mỗi quest tối đa <b>4 giờ</b>.</li>
+            <li>Chọn <b>đúng một</b> việc quan trọng nhất, làm xong rồi gạch.</li>
+          </ol>
+        </div>
+      </section>
+    </main>
+
+    <button class="fab" id="fab" aria-label="Thêm quest">＋</button>
+
+    <nav class="tabbar">
+      <button class="tab active" data-screen="quests"><span>📜</span>Nhiệm vụ</button>
+      <button class="tab" data-screen="shop"><span>🛒</span>Cửa hàng</button>
+      <button class="tab" data-screen="hero"><span>🛡</span>Hồ sơ</button>
+    </nav>
+  </div>
+
+  <div class="sheet-backdrop" id="sheetBackdrop" hidden>
+    <form class="sheet" id="questForm" autocomplete="off">
+      <h2 id="sheetTitle">Quest mới</h2>
+      <label class="field">Tên quest
+        <input id="qTitle" maxlength="120" placeholder="Ví dụ: Làm màn hình tiêu đề">
+      </label>
+      <div class="field">Thời lượng ước tính
+        <div class="chips" id="durationChips"></div>
+      </div>
+      <div class="split" id="splitBox" hidden>
+        <p class="warn">⚠ Quest quá lớn! Chia thành các quest con, mỗi quest <b id="maxH1">4</b> giờ trở xuống.</p>
+        <div id="subRows"></div>
+        <button type="button" class="btn ghost small" id="addSub">＋ Thêm quest con</button>
+      </div>
+      <p class="error" id="formError" role="alert"></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn ghost" id="cancelSheet">Hủy</button>
+        <button type="submit" class="btn primary">Nhận quest</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <div id="fx" aria-hidden="true"></div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="config.js"></script>
+  <script src="logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

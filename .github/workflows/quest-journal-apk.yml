@@ -1,0 +1,84 @@
+name: Quest Journal APK
+
+on:
+  push:
+    branches: ['claude/code-game-studios-yrck16', 'main']
+    paths:
+      - 'game-studio/src/quest-journal/**'
+      - 'game-studio/tests/unit/quest-journal/**'
+      - '.github/workflows/quest-journal-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game-studio/src/quest-journal
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: game-studio/src/quest-journal/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Create Android project
+        run: |
+          npx cap add android
+          npx -y @capacitor/assets@3.0.5 generate --android \
+            --iconBackgroundColor '#1b1426' --iconBackgroundColorDark '#1b1426' \
+            --splashBackgroundColor '#1b1426' --splashBackgroundColorDark '#1b1426'
+          npx cap sync android
+          # versionCode tăng theo mỗi lần build để cài đè bản cũ được
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -E 'versionCode|versionName' android/app/build.gradle
+
+      - name: Use fixed signing key (optional)
+        # Nếu có secret QJ_KEYSTORE_BASE64, mọi bản build dùng chung chữ ký nên cài đè được mà không mất dữ liệu.
+        env:
+          KEYSTORE: ${{ secrets.QJ_KEYSTORE_BASE64 }}
+        if: env.KEYSTORE != ''
+        run: |
+          mkdir -p ~/.android
+          echo "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+
+      - name: Build APK
+        working-directory: game-studio/src/quest-journal/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          mkdir -p ../dist
+          cp app/build/outputs/apk/debug/app-debug.apk ../dist/QuestJournal-1.0.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuestJournal-apk
+          path: game-studio/src/quest-journal/dist/*.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: quest-journal-v1.0.${{ github.run_number }}
+          name: Quest Journal 1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body: |
+            File APK của Quest Journal. Tải file `.apk` bên dưới về điện thoại Android rồi mở để cài
+            (cho phép "Cài ứng dụng không rõ nguồn gốc" nếu máy hỏi).
+          files: game-studio/src/quest-journal/dist/*.apk
